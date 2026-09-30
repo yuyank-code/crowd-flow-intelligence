@@ -2,6 +2,7 @@ import math
 import random
 from dataclasses import asdict
 from .models import Venue, Node, Edge, Scenario, SimulationState
+from .risk.thresholds import THRESHOLDS
 
 class CrowdEngine:
     def __init__(self, venue: Venue, scenario: Scenario | None = None, seed: int = 42):
@@ -67,8 +68,9 @@ class CrowdEngine:
         emergency = bool(self.closed_nodes)
         s = self.state
         s.risk_score = min(100.0, peak * 78 + count * 4 + (15 if emergency else 0))
-        s.risk_level = "CRITICAL" if s.risk_score >= 80 else "HIGH" if s.risk_score >= 60 else "MODERATE" if s.risk_score >= 35 else "LOW"
-        s.bottlenecks = [e.id for e in self.venue.edges.values() if e.status == "open" and e.density >= .70]
+        s.risk_level = THRESHOLDS.classify(peak)
+        if emergency and s.risk_level == "LOW": s.risk_level = "MODERATE"
+        s.bottlenecks = [e.id for e in self.venue.edges.values() if e.status == "open" and e.density >= THRESHOLDS.density_high]
 
     def snapshot(self):
         return {
