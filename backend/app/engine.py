@@ -3,6 +3,7 @@ import random
 from dataclasses import asdict
 from .models import Venue, Node, Edge, Scenario, SimulationState
 from .risk.thresholds import THRESHOLDS
+from .graph.bridge import graph_from_venue, sync_venue_to_graph
 
 class CrowdEngine:
     def __init__(self, venue: Venue, scenario: Scenario | None = None, seed: int = 42):
@@ -10,7 +11,7 @@ class CrowdEngine:
         self.scenario = scenario or Scenario()
         self.state = SimulationState()
         self.rng = random.Random(seed)
-        self.closed_nodes: set[str] = set()
+        self.closed_nodes: set[str] = set()\n        self.graph = graph_from_venue(venue)
 
     def start(self):
         if self.state.status in {"standby", "paused"}: self.state.status = "running"
@@ -22,7 +23,7 @@ class CrowdEngine:
         self.state = SimulationState()
         for n in self.venue.nodes.values(): n.occupancy = 0
         for e in self.venue.edges.values(): e.flow_per_min = 0; e.density = 0; e.status = "open"
-        self.closed_nodes.clear()
+        self.closed_nodes.clear()\n        self.graph = graph_from_venue(self.venue)
 
     def emergency(self, kind: str, node_id: str):
         if node_id in self.venue.nodes:
