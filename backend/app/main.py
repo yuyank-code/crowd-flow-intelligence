@@ -64,13 +64,28 @@ def emergency(req: EmergencyRequest):
 @app.post("/api/simulation/emergency/clear")
 def clear_emergency(): engine.clear_emergency(); return engine.snapshot()
 
+
+def parse_operator_scenario(text: str) -> dict:
+    import re
+    t = text.lower().replace(",", "")
+    crowd = 20000
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(million|m|thousand|k)?\s*(?:people|persons|crowd)?", t)
+    if m:
+        value=float(m.group(1)); unit=m.group(2) or ""
+        if unit in ("million","m"): value*=1_000_000
+        elif unit in ("thousand","k"): value*=1_000
+        crowd=max(0,min(1_000_000,int(value)))
+    arrival=600
+    m=re.search(r"(?:arriv(?:al|ing)|entry|entering)[^0-9]{0,20}(\d+)",t)
+    if m: arrival=max(0,min(100_000,int(m.group(1))))
+    exit_rate=800
+    m=re.search(r"(?:exit|exiting|leav(?:e|ing))[^0-9]{0,20}(\d+)",t)
+    if m: exit_rate=max(0,min(100_000,int(m.group(1))))
+    return {"crowd_size":crowd,"arrival_rate":arrival,"exit_rate":exit_rate,"entry_distribution":{"gate-e":.55,"gate-w":.30,"gate-s":.15},"explanation":"Operator language converted to structured simulation inputs. Risk and routing remain deterministic."}
+
 @app.post("/api/scenarios/parse")
 def parse_scenario(payload: dict):
-    text = str(payload.get("text","")).lower()
-    crowd = 20000
-    for token in text.replace(",","").split():
-        if token.isdigit(): crowd = int(token); break
-    return {"crowd_size":crowd,"arrival_rate":600,"exit_rate":800,"entry_distribution":{"gate-e":.55,"gate-w":.30,"gate-s":.15}, "explanation":"Structured scenario generated from operator text. Deterministic simulation remains the source of risk calculations."}
+    return parse_operator_scenario(str(payload.get("text","")))
 
 async def simulation_loop():
     while True:
