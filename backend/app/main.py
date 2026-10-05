@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .api.routes.geospatial import router as geospatial_router
 from .core.config import settings
@@ -44,6 +44,16 @@ class ScenarioRequest(BaseModel):
     entry_distribution: dict[str, float] = Field(
         default_factory=lambda: {"gate-e": .55, "gate-w": .30, "gate-s": .15}
     )
+
+    @field_validator("entry_distribution")
+    @classmethod
+    def validate_distribution(cls, value: dict[str, float]):
+        if not value or any(v < 0 for v in value.values()):
+            raise ValueError("entry_distribution must contain non-negative fractions")
+        total = sum(value.values())
+        if abs(total - 1.0) > 0.01:
+            raise ValueError("entry_distribution fractions must sum to 1.0")
+        return value
 
 
 class EmergencyRequest(BaseModel):
