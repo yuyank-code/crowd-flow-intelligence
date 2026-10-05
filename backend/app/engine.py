@@ -103,7 +103,9 @@ class CrowdEngine:
                     if a.destination == "stage":
                         a.destination = "exit-n"; a.path = self.graph.find_path(a.node_id, a.destination) or [a.node_id]; a.path_index = 0; a.progress_m = 0
                         continue
-                    a.active = False; break
+                    a.active = False
+                    self.state.total_exited += 1
+                    break
                 edge = self.graph.get_edge_between(a.node_id, nxt)
                 if edge is None or not edge.is_traversable: self._reroute_agent(a); break
                 step = min(remaining, max(1.0, edge.length - a.progress_m))
