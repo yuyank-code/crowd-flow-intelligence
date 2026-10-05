@@ -16,3 +16,21 @@ def test_emergency_closes_node_paths():
     engine.emergency("gate-failure", "gate-e")
     assert "gate-e" in engine.closed_nodes
     assert any(e.status == "emergency-closed" for e in engine.venue.edges.values())
+
+
+
+def test_scenario_interpretation_is_structured_and_does_not_score_risk():
+    from app.ai.service import interpret
+    result = interpret("30000 people arriving at 900 per minute")
+    assert result.crowd_size == 30000
+    assert result.arrival_rate == 900
+    assert result.exit_rate == 800
+    assert not hasattr(result, "risk_score")
+
+
+def test_decision_explanation_uses_engine_output_only():
+    from app.ai.service import explain
+    result = explain({"state": {"risk_score": 42, "risk_level": "MODERATE", "bottlenecks": ["e-w"], "events": []}})
+    assert result["risk_score"] == 42
+    assert result["bottlenecks"] == ["e-w"]
+    assert "deterministic" in result["safety_note"]
