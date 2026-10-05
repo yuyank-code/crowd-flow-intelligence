@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from .api.routes.geospatial import router as geospatial_router
+from .api.routes.cctv import router as cctv_router
 from .core.config import settings
 from .db.database import close_db, init_db
 from .db.repository import history, save_snapshot
@@ -35,6 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(geospatial_router)
+app.include_router(cctv_router)
 
 
 class ScenarioRequest(BaseModel):
