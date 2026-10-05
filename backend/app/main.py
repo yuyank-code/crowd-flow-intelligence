@@ -10,6 +10,7 @@ from .core.config import settings
 from .db.database import close_db, init_db
 from .db.repository import history, save_snapshot
 from .engine import CrowdEngine, Scenario, build_demo_venue
+from .ai.service import explain as explain_snapshot, interpret as interpret_scenario
 
 venue = build_demo_venue()
 engine = CrowdEngine(venue)
@@ -150,6 +151,19 @@ def parse_operator_scenario(text: str) -> dict:
 @app.post("/api/scenarios/parse")
 def parse_scenario(payload: dict):
     return parse_operator_scenario(str(payload.get("text", "")))
+
+
+@app.post("/api/scenarios/interpret")
+def interpret(payload: dict):
+    result = interpret_scenario(str(payload.get("text", "")))
+    return {"crowd_size": result.crowd_size, "arrival_rate": result.arrival_rate, "exit_rate": result.exit_rate,
+            "entry_distribution": result.entry_distribution, "assumptions": result.assumptions,
+            "explanation": "Scenario interpretation is deterministic. Safety scoring remains in the risk engine."}
+
+
+@app.get("/api/decision-support")
+def decision_support():
+    return explain_snapshot(engine.snapshot())
 
 
 async def simulation_loop():
