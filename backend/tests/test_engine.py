@@ -34,3 +34,14 @@ def test_decision_explanation_uses_engine_output_only():
     assert result["risk_score"] == 42
     assert result["bottlenecks"] == ["e-w"]
     assert "deterministic" in result["safety_note"]
+
+
+
+def test_invalid_entry_distribution_is_rejected():
+    from pydantic import ValidationError
+    from app.main import ScenarioRequest
+    try:
+        ScenarioRequest(entry_distribution={"gate-e": 2.0})
+        assert False, "expected validation error"
+    except ValidationError:
+        pass
