@@ -1,0 +1,1 @@
+"""Authorized CCTV adapter layer."""
