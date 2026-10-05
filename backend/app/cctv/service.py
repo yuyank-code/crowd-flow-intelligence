@@ -34,7 +34,7 @@ def configured_sources() -> list[CameraSource]:
         if url:
             parsed = urlparse(str(url))
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-                raise CCTVAdapterError(f"invalid CCTV URL for source {item["id"]}")
+                raise CCTVAdapterError(f"invalid CCTV URL for source {item['id']}")
         sources.append(CameraSource(id=str(item["id"]), name=str(item["name"]), kind=str(item.get("kind", "metadata")), url=str(url) if url else None, zone=str(item["zone"]) if item.get("zone") else None))
     return sources
 
