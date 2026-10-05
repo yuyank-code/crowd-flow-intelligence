@@ -30,3 +30,16 @@ def test_snapshot_exposes_graph_and_agent_metrics():
     assert "graph" in snapshot
     assert "active_agents" in snapshot["state"]
     assert "reroutes" in snapshot["state"]
+
+
+
+def test_exited_agents_update_population_counts():
+    engine = CrowdEngine(build_demo_venue())
+    engine.start()
+    engine.scenario.crowd_size = 1
+    engine.scenario.arrival_rate = 1
+    for _ in range(120):
+        engine.tick(0.5)
+    assert engine.state.total_entered == 1
+    assert engine.state.total_exited == 1
+    assert engine.state.people_inside == 0
