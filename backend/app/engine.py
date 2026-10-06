@@ -66,7 +66,9 @@ class CrowdEngine:
     def tick(self, dt_min: float = 0.5):
         if self.state.status != "running": return self.snapshot()
         s, sc = self.state, self.scenario
-        entering = min(sc.crowd_size - s.total_entered, int(sc.arrival_rate * dt_min)) if s.total_entered < sc.crowd_size else 0
+        inside = s.total_entered - s.total_exited
+        natural_exits = min(inside, int(sc.exit_rate * dt_min)) if inside > 0 else 0
+        entering_capacity = max(0, sc.crowd_size - s.total_entered)\n        entering = min(entering_capacity, int(sc.arrival_rate * dt_min))
         if entering:
             s.total_entered += entering
             self._spawn_agents()
@@ -76,7 +78,7 @@ class CrowdEngine:
         self._recalculate()
         return self.snapshot()
 
-    def _spawn_agents(self):
+    def _retire_for_exit_rate(self, count: int):\n        """Apply the configured aggregate exit throughput without inventing paths."""\n        remaining = count\n        for agent in self.agents.values():\n            if remaining <= 0:\n                break\n            if agent.active and agent.destination == "exit-n" and agent.node_id == "exit-n":\n                agent.active = False\n                self.state.total_exited += 1\n                remaining -= 1\n\n    def _spawn_agents(self):
         target = min(self.scenario.crowd_size, 20000)
         while len(self.agents) < min(target, self.state.total_entered):
             gate = self._choose_gate()
