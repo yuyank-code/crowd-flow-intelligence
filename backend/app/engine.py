@@ -73,12 +73,24 @@ class CrowdEngine:
             s.total_entered += entering
             self._spawn_agents()
         self._move_agents(dt_min)
+        if natural_exits:
+            self._retire_for_exit_rate(natural_exits)
         self._update_flows()
         s.sim_time_min += dt_min
         self._recalculate()
         return self.snapshot()
 
-    def _retire_for_exit_rate(self, count: int):\n        """Apply the configured aggregate exit throughput without inventing paths."""\n        remaining = count\n        for agent in self.agents.values():\n            if remaining <= 0:\n                break\n            if agent.active and agent.destination == "exit-n" and agent.node_id == "exit-n":\n                agent.active = False\n                self.state.total_exited += 1\n                remaining -= 1\n\n    def _spawn_agents(self):
+    def _retire_for_exit_rate(self, count: int):
+        """Apply configured aggregate exit throughput to agents at the exit."""
+        remaining = count
+        for agent in self.agents.values():
+            if remaining <= 0:
+                break
+            if agent.active and agent.destination == "exit-n" and agent.node_id == "exit-n":
+                agent.active = False
+                self.state.total_exited += 1
+                remaining -= 1
+\n    def _spawn_agents(self):
         target = min(self.scenario.crowd_size, 20000)
         while len(self.agents) < min(target, self.state.total_entered):
             gate = self._choose_gate()
