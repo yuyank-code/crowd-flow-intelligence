@@ -235,11 +235,19 @@ function App() {
         </div>
         <section className="history-section">
           <div className="history-heading"><label>SIMULATION HISTORY</label><button onClick={() => historyOpen ? setHistoryOpen(false) : void loadHistory()}>{historyOpen ? "HIDE HISTORY" : "LOAD HISTORY"}</button></div>
-          {historyOpen && (historyItems.length ? <div className="history-list">{historyItems.map((item) => <div className="history-item" key={item.id}>
-            <span>#{item.id} · {new Date(item.created_at).toLocaleString()}</span>
-            <span>{item.sim_time_min.toFixed(1)} min · {item.risk_level} ({Math.round(item.risk_score)})</span>
-            <span>Inside: {item.snapshot?.state?.people_inside ?? "—"}</span>
-          </div>) : <p className="muted">No snapshots saved yet. Start the simulation and check again.</p>)}
+          {historyOpen && (
+            historyItems.length ? (
+              <div className="history-list">
+                {historyItems.map((item) => (
+                  <div className="history-item" key={item.id}>
+                    <span>#{item.id} · {new Date(item.created_at).toLocaleString()}</span>
+                    <span>{item.sim_time_min.toFixed(1)} min · {item.risk_level} ({Math.round(item.risk_score)})</span>
+                    <span>Inside: {item.snapshot?.state?.people_inside ?? "—"}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="muted">No snapshots saved yet. Start the simulation and check again.</p>
+          )}
         </section>
       </div>
 
