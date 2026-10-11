@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
@@ -24,6 +24,10 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(simulation_loop())
     yield
     task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
     await close_db()
 
 
@@ -76,7 +80,7 @@ def venues():
 @app.get("/api/venues/{venue_id}")
 def venue_detail(venue_id: str):
     if venue_id != venue.id:
-        return {"error": "venue_not_found"}
+        raise HTTPException(status_code=404, detail="venue_not_found")
     return engine.snapshot()
 
 
@@ -86,7 +90,7 @@ def simulation():
 
 
 @app.get("/api/simulation/history")
-async def simulation_history(limit: int = 50):
+async def simulation_history(limit: int = Query(default=50, ge=1, le=500)):
     return {"items": await history(SIMULATION_ID, limit)}
 
 
@@ -117,6 +121,8 @@ def reset():
 
 @app.post("/api/simulation/emergency")
 def emergency(req: EmergencyRequest):
+    if req.node_id not in venue.nodes:
+        raise HTTPException(status_code=404, detail="venue_node_not_found")
     engine.emergency(req.kind, req.node_id)
     return engine.snapshot()
 
