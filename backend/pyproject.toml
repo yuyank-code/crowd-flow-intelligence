@@ -2,7 +2,7 @@
 name = "crowd-flow-intelligence"
 version = "0.1.0"
 description = "Real-time crowd intelligence and decision-support platform"
-readme = "../README.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
