@@ -1,22 +1,182 @@
-import {useEffect,useMemo,useState} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DecisionSupport from "./components/DecisionSupport";
+import { request, wsUrl } from "./api";
 
-type Node={id:string;label:string;kind:string;x:number;y:number;capacity:number;occupancy:number};
-type Edge={id:string;source:string;target:string;capacity_per_min:number;density:number;status:string};
-type Snapshot={venue:{name:string;latitude:number;longitude:number};state:{status:string;sim_time_min:number;people_inside:number;total_entered:number;total_exited:number;risk_score:number;risk_level:string;bottlenecks:string[];events:any[];active_agents:number;reroutes:number};nodes:Node[];edges:Edge[]};
+type Node = { id: string; label: string; kind: string; x: number; y: number; capacity: number; occupancy: number };
+type Edge = { id: string; source: string; target: string; capacity_per_min: number; density: number; status: string };
+type Snapshot = {
+  venue: { name: string; latitude: number; longitude: number };
+  state: {
+    status: string; sim_time_min: number; people_inside: number; total_entered: number; total_exited: number;
+    risk_score: number; risk_level: string; bottlenecks: string[]; events: { type: string; node_id?: string | null; time: number }[];
+    active_agents: number; stranded_agents: number; waiting_to_exit: number; reroutes: number;
+    effective_crowd_size: number; crowd_capped: boolean; closed_nodes: string[];
+  };
+  nodes: Node[]; edges: Edge[];
+};
+type Interpretation = { crowd_size: number; arrival_rate: number; exit_rate: number; assumptions: string[]; explanation: string };
+type HistoryRow = { id: number; created_at: string; sim_time_min: number; risk_score: number; risk_level: string };
+type Camera = { id: string; name: string; configured: boolean };
+type Geo = { error?: string; features?: unknown[]; attribution?: string; source?: string };
 
-const API=import.meta.env.VITE_API_BASE_URL||"http://localhost:8000";
-function App(){
- const [snap,setSnap]=useState<Snapshot|null>(null); const [scenario,setScenario]=useState("30,000 people arriving for an evening concert"); const [connected,setConnected]=useState(false); const [geo,setGeo]=useState<any>(null); const [cameras,setCameras]=useState<any[]>([]); const [interpretation,setInterpretation]=useState<any>(null);
- const load=async()=>{const r=await fetch(API+"/api/simulation"); setSnap(await r.json())};
- useEffect(()=>{load(); fetch(API+"/api/cctv/sources").then(r=>r.ok?r.json():{items:[]}).then(x=>setCameras(x.items||[])).catch(()=>setCameras([])); const wsUrl=(import.meta.env.VITE_WS_BASE_URL||API.replace("http","ws"))+"/ws/simulation"; let ws:WebSocket; let timer:number|undefined; const connect=()=>{ws=new WebSocket(wsUrl); ws.onopen=()=>setConnected(true); ws.onmessage=e=>setSnap(JSON.parse(e.data)); ws.onclose=()=>{setConnected(false); timer=window.setTimeout(connect,1500)}; ws.onerror=()=>ws.close()}; connect(); return()=>{if(timer)window.clearTimeout(timer); ws?.close()}},[]);
- const act=async(path:string,body?:any)=>{const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined}); if(!r.ok) throw new Error("request failed"); load()}; const loadGeo=async()=>{if(!snap)return; const r=await fetch(API+"/api/geo/context",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lat:snap.venue.latitude,lon:snap.venue.longitude,radius_m:1000})}); setGeo(await r.json())}; const interpret=async()=>{const r=await fetch(API+"/api/scenarios/interpret",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:scenario})}); const x=await r.json(); setInterpretation(x); return x};
- const nodes=useMemo(()=>snap?.nodes||[],[snap]); const edges=snap?.edges||[];
- return <div className="app"><header><div><b>CROWD FLOW</b><span> INTELLIGENCE</span><small>Venue operations & geospatial decision support</small></div><div className="status">● {connected?"LIVE":"OFFLINE"}</div></header>
- <main><aside><section><label>AI SCENARIO ASSISTANT</label><textarea value={scenario} onChange={e=>setScenario(e.target.value)}/><button onClick={async()=>{const s=await interpret();await act("/api/simulation/scenario",s)}}>INTERPRET & SIMULATE</button>{interpretation&&<p className="muted">Interpreted: {interpretation.crowd_size.toLocaleString()} people · {interpretation.arrival_rate}/min arrival · {interpretation.exit_rate}/min exit</p>}</section>
- <section><label>RUN CONTROLS</label><div className="row"><button onClick={()=>act("/api/simulation/start")}>START</button><button onClick={()=>act("/api/simulation/pause")}>PAUSE</button><button onClick={()=>act("/api/simulation/reset")}>RESET</button></div></section>
- <section><label>EMERGENCY TEST</label><div className="row"><button onClick={()=>act("/api/simulation/emergency",{kind:"gate-failure",node_id:"gate-e"})}>GATE E</button><button onClick={()=>act("/api/simulation/emergency",{kind:"fire",node_id:"j-c"})}>FIRE</button></div><button onClick={()=>act("/api/simulation/emergency/clear")}>CLEAR INCIDENT</button></section>
- <section><label>GEO CONTEXT</label><p>Venue: {snap?.venue.name||"—"}</p><p>Lat/Lon: {snap?.venue.latitude.toFixed(4)}, {snap?.venue.longitude.toFixed(4)}</p><button onClick={loadGeo}>LOAD PUBLIC GEO CONTEXT</button>{geo&&<p className="muted">{geo.error||`${geo.features?.length||0} nearby public-road/transit/emergency features loaded`}<br/>{geo.attribution}</p>}<p className="muted">Public geospatial context is provider-backed; no unrestricted satellite/CCTV access is assumed.</p></section></aside>
- <div className="center"><div className="metrics">{[["PEOPLE",snap?.state.people_inside||0],["AGENTS",snap?.state.active_agents||0],["REROUTES",snap?.state.reroutes||0],["RISK",Math.round(snap?.state.risk_score||0)]].map(([k,v])=><div className="metric" key={k}><small>{k}</small><strong>{v}</strong></div>)}</div><div className="map"><div className="grid"></div>{edges.map(e=>{const a=nodes.find(n=>n.id===e.source),b=nodes.find(n=>n.id===e.target); if(!a||!b)return null; return <div key={e.id} className={"edge "+(e.density>.7?"hot":"")} style={{left:a.x+"%",top:a.y+"%",width:Math.hypot(b.x-a.x,b.y-a.y)+"%",transform:`rotate(${Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI}deg)`}}/>})}{nodes.map(n=><div key={n.id} className={"node "+n.kind} style={{left:n.x+"%",top:n.y+"%"}} title={n.label}><span></span><small>{n.label}</small></div>)}<div className="maptitle">VENUE DIGITAL TWIN · LIVE AGENT SIMULATION</div></div><div className="timeline">Simulation time: {snap?.state.sim_time_min.toFixed(1)||"0.0"} min · Status: {snap?.state.status||"standby"} · Exited: {snap?.state.total_exited||0}</div></div>
- <aside className="right"><section><label>RISK ENGINE</label><div className={"risk "+(snap?.state.risk_level||"LOW").toLowerCase()}>{snap?.state.risk_level||"LOW"} <b>{Math.round(snap?.state.risk_score||0)}/100</b></div></section><section><label>BOTTLENECKS</label>{snap?.state.bottlenecks.length?<ul>{snap.state.bottlenecks.map(x=><li key={x}>{x}</li>)}</ul>:<p>All monitored corridors are below threshold.</p>}</section><section><label>CCTV SOURCES</label>{cameras.length?cameras.map(c=><p className="muted" key={c.id}>● {c.name} · {c.configured?"configured":"metadata only"}</p>):<p className="muted">No authorized camera sources configured.</p>}</section><section><label>INCIDENTS</label>{snap?.state.events.length?<ul>{snap.state.events.slice(-5).map((x:any,i)=><li key={i}>{x.type} · {x.node_id||"system"}</li>)}</ul>:<p>No incidents recorded.</p>}</section><section><label>OPERATOR NOTE</label><p>Agents route through the venue graph. Emergency closures disable affected edges and trigger deterministic rerouting. Risk calculations remain deterministic and auditable.</p></section><section><label>DECISION SUPPORT</label><DecisionSupport api={API}/></section></aside></main></div>}
-export default App;
+const STALE_AFTER_MS = 3000;
+
+export default function App() {
+  const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [lastUpdate, setLastUpdate] = useState(0);
+  const [now, setNow] = useState(Date.now());
+  const [connected, setConnected] = useState(false);
+  const [scenario, setScenario] = useState("30,000 people arriving for an evening concert");
+  const [interpretation, setInterpretation] = useState<Interpretation | null>(null);
+  const [geo, setGeo] = useState<Geo | null>(null);
+  const [cameras, setCameras] = useState<Camera[] | null>(null);
+  const [history, setHistory] = useState<HistoryRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null); // name of the in-flight action; blocks duplicates
+  const busyRef = useRef(false);
+
+  const accept = useCallback((s: Snapshot) => { setSnap(s); setLastUpdate(Date.now()); }, []);
+
+  // Initial load + WebSocket with reconnect; everything is cleaned up on unmount.
+  useEffect(() => {
+    let closed = false, ws: WebSocket | undefined, timer: number | undefined;
+    request<Snapshot>("/api/simulation").then(accept).catch(e => setError((e as Error).message));
+    request<{ items: Camera[] }>("/api/cctv/sources").then(x => setCameras(x.items)).catch(() => setCameras([]));
+    const connect = () => {
+      ws = new WebSocket(wsUrl());
+      ws.onopen = () => { setConnected(true); setError(null); };
+      ws.onmessage = e => accept(JSON.parse(e.data));
+      ws.onclose = () => { setConnected(false); if (!closed) timer = window.setTimeout(connect, 1500); };
+      ws.onerror = () => ws?.close();
+    };
+    connect();
+    const tick = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => { closed = true; window.clearTimeout(timer); window.clearInterval(tick); ws?.close(); };
+  }, [accept]);
+
+  // One command at a time: prevents double-clicks and overlapping start/pause/reset.
+  const run = async (name: string, fn: () => Promise<unknown>) => {
+    if (busyRef.current) return;
+    busyRef.current = true; setBusy(name); setError(null);
+    try { await fn(); } catch (e) { setError(`${name}: ${(e as Error).message}`); }
+    finally { busyRef.current = false; setBusy(null); }
+  };
+  const post = async (path: string, body?: unknown) =>
+    accept(await request<Snapshot>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }));
+  const control = async (path: string) => {
+    await request(path, { method: "POST" });
+    accept(await request<Snapshot>("/api/simulation"));
+  };
+
+  const interpretAndRun = () => run("Scenario", async () => {
+    const x = await request<Interpretation>("/api/scenarios/interpret", { method: "POST", body: JSON.stringify({ text: scenario }) });
+    setInterpretation(x);
+    await post("/api/simulation/scenario", x);
+  });
+  const loadGeo = () => run("Geo context", async () => {
+    if (!snap) throw new Error("no venue loaded yet");
+    setGeo(await request<Geo>("/api/geo/context", { method: "POST", body: JSON.stringify({ lat: snap.venue.latitude, lon: snap.venue.longitude, radius_m: 1000 }) }));
+  });
+  const loadHistory = () => run("History", async () => setHistory((await request<{ items: HistoryRow[] }>("/api/simulation/history?limit=20")).items));
+
+  const nodes = useMemo(() => snap?.nodes ?? [], [snap]);
+  const edges = snap?.edges ?? [];
+  const s = snap?.state;
+  const stale = connected && now - lastUpdate > STALE_AFTER_MS;
+  const statusLabel = !connected ? "OFFLINE" : stale ? "STALE" : "LIVE";
+  const off = !!busy || !snap;
+
+  if (!snap) {
+    return <div className="app"><p className="muted" style={{ padding: 24 }}>{error ?? "Connecting to simulation…"}</p></div>;
+  }
+
+  return (
+    <div className="app">
+      <header>
+        <div><b>CROWD FLOW</b><span> INTELLIGENCE</span><small>Venue operations & geospatial decision support · prototype, not a certified life-safety system</small></div>
+        <div className="status">● {statusLabel}{!connected && " – showing last known state"}</div>
+      </header>
+      {error && <div className="banner" role="alert">{error} <button onClick={() => setError(null)}>dismiss</button></div>}
+      <main>
+        <aside>
+          <section>
+            <label>SCENARIO (rule-based parser, not an LLM)</label>
+            <textarea value={scenario} maxLength={2000} onChange={e => setScenario(e.target.value)} />
+            <button disabled={off || !scenario.trim()} onClick={interpretAndRun}>{busy === "Scenario" ? "WORKING…" : "INTERPRET & SIMULATE"}</button>
+            {interpretation && (
+              <div className="muted">
+                <p>{interpretation.crowd_size.toLocaleString()} people · {interpretation.arrival_rate}/min in · {interpretation.exit_rate}/min out</p>
+                <ul>{interpretation.assumptions.map(a => <li key={a}>{a}</li>)}</ul>
+              </div>
+            )}
+            {s?.crowd_capped && <p className="muted">Crowd capped at {s.effective_crowd_size.toLocaleString()} simulated people (1 agent = 1 person).</p>}
+          </section>
+          <section>
+            <label>RUN CONTROLS</label>
+            <div className="row">
+              <button disabled={off || s?.status === "running"} onClick={() => run("Start", () => control("/api/simulation/start"))}>START</button>
+              <button disabled={off || s?.status !== "running"} onClick={() => run("Pause", () => control("/api/simulation/pause"))}>PAUSE</button>
+              <button disabled={off} onClick={() => run("Reset", () => post("/api/simulation/reset"))}>RESET</button>
+            </div>
+          </section>
+          <section>
+            <label>EMERGENCY TEST</label>
+            <div className="row">
+              <button disabled={off || s?.closed_nodes.includes("gate-e")} onClick={() => run("Emergency", () => post("/api/simulation/emergency", { kind: "gate-failure", node_id: "gate-e" }))}>GATE E</button>
+              <button disabled={off || s?.closed_nodes.includes("j-c")} onClick={() => run("Emergency", () => post("/api/simulation/emergency", { kind: "fire", node_id: "j-c" }))}>FIRE</button>
+            </div>
+            {s?.closed_nodes.length ? s.closed_nodes.map(id => (
+              <button key={id} disabled={off} onClick={() => run("Clear", () => post("/api/simulation/emergency/clear", { node_id: id }))}>CLEAR {id.toUpperCase()}</button>
+            )) : <p className="muted">No active incidents.</p>}
+            {(s?.closed_nodes.length ?? 0) > 1 && <button disabled={off} onClick={() => run("Clear", () => post("/api/simulation/emergency/clear"))}>CLEAR ALL</button>}
+          </section>
+          <section>
+            <label>GEO CONTEXT (OpenStreetMap, on demand)</label>
+            <p>Venue: {snap.venue.name}</p>
+            <p>Lat/Lon: {snap.venue.latitude.toFixed(4)}, {snap.venue.longitude.toFixed(4)}</p>
+            <button disabled={off} onClick={loadGeo}>{busy === "Geo context" ? "LOADING…" : "LOAD PUBLIC GEO CONTEXT"}</button>
+            {geo && <p className="muted">{geo.error ? `Unavailable: ${geo.error}` : `${geo.features?.length ?? 0} features loaded (fetched ${new Date().toLocaleTimeString()}).`}<br />{geo.attribution}</p>}
+            <p className="muted">Static public map data only. No live traffic, satellite or incident feed is connected.</p>
+          </section>
+        </aside>
+        <div className="center">
+          <div className="metrics">
+            {([["PEOPLE", s?.people_inside], ["MOVING", s?.active_agents], ["STRANDED", s?.stranded_agents], ["EXITED", s?.total_exited], ["REROUTES", s?.reroutes], ["RISK", Math.round(s?.risk_score ?? 0)]] as const).map(([k, v]) => (
+              <div className="metric" key={k}><small>{k}</small><strong>{v ?? 0}</strong></div>
+            ))}
+          </div>
+          <div className="map">
+            <div className="grid" />
+            {edges.map(e => {
+              const a = nodes.find(n => n.id === e.source), b = nodes.find(n => n.id === e.target);
+              if (!a || !b) return null;
+              const cls = e.status === "emergency-closed" ? "closed" : e.density > 0.65 ? "hot" : "";
+              return <div key={e.id} className={"edge " + cls} title={`${e.id}: ${(e.density * 100).toFixed(0)}% · ${e.status}`}
+                style={{ left: a.x + "%", top: a.y + "%", width: Math.hypot(b.x - a.x, b.y - a.y) + "%", transform: `rotate(${Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI}deg)` }} />;
+            })}
+            {nodes.map(n => (
+              <div key={n.id} className={"node " + n.kind} style={{ left: n.x + "%", top: n.y + "%" }} title={`${n.label}: ${n.occupancy}/${n.capacity}`}>
+                <span /><small>{n.label} ({n.occupancy})</small>
+              </div>
+            ))}
+            <div className="maptitle">VENUE GRAPH · SIMULATED AGENTS</div>
+          </div>
+          <div className="timeline">Simulation time: {s?.sim_time_min.toFixed(1)} min · Status: {s?.status} · Inside: {s?.people_inside} · Waiting to exit: {s?.waiting_to_exit}</div>
+        </div>
+        <aside className="right">
+          <section><label>RISK ENGINE (deterministic)</label><div className={"risk " + (s?.risk_level ?? "LOW").toLowerCase()}>{s?.risk_level} <b>{Math.round(s?.risk_score ?? 0)}/100</b></div></section>
+          <section><label>BOTTLENECKS</label>{s?.bottlenecks.length ? <ul>{s.bottlenecks.map(x => <li key={x}>{x}</li>)}</ul> : <p>All monitored corridors are below threshold.</p>}</section>
+          <section><label>CCTV SOURCES (catalog only, no video analytics)</label>
+            {cameras === null ? <p className="muted">Loading…</p> : cameras.length ? cameras.map(c => <p className="muted" key={c.id}>● {c.name} · {c.configured ? "URL configured" : "metadata only"}</p>) : <p className="muted">No authorized camera sources configured.</p>}
+          </section>
+          <section><label>INCIDENTS</label>{s?.events.length ? <ul>{s.events.slice(-5).map((x, i) => <li key={i}>{x.type} · {x.node_id ?? "all"} · t={x.time}</li>)}</ul> : <p>No incidents recorded.</p>}</section>
+          <section><label>DECISION SUPPORT (rule-based)</label><DecisionSupport active={connected} /></section>
+          <section><label>HISTORY</label>
+            <button disabled={!!busy} onClick={loadHistory}>{busy === "History" ? "LOADING…" : history ? "REFRESH" : "LOAD HISTORY"}</button>
+            {history && (history.length ? <ul>{history.map(h => <li key={h.id}>t={h.sim_time_min.toFixed(1)}m · {h.risk_level} {Math.round(h.risk_score)} · {new Date(h.created_at).toLocaleTimeString()}</li>)}</ul> : <p className="muted">No saved snapshots yet. Start a run; one is stored every few seconds.</p>)}
+          </section>
+        </aside>
+      </main>
+    </div>
+  );
+}

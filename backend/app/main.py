@@ -1,20 +1,25 @@
 import asyncio
+import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from .api.routes.geospatial import router as geospatial_router
 from .api.routes.cctv import router as cctv_router
 from .core.config import settings
+from .core.security import (client_ip, geo_limiter, operator_guard, origin_allowed, parse_limiter,
+                            ws_connections)
 from .db.database import close_db, init_db
-from .db.repository import history, save_snapshot
+from .db.repository import history, prune, save_snapshot
 from .engine import CrowdEngine, Scenario, build_demo_venue
 from .ai.service import explain as explain_snapshot, interpret as interpret_scenario
 
 venue = build_demo_venue()
-engine = CrowdEngine(venue)
+engine = CrowdEngine(venue, max_agents=settings.max_agents)
+log = logging.getLogger("crowdflow")
 SIMULATION_ID = venue.id
 
 
@@ -35,11 +40,11 @@ app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=li
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,  # auth uses the X-API-Key header, never cookies
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
-app.include_router(geospatial_router)
+app.include_router(geospatial_router, dependencies=[Depends(geo_limiter)])
 app.include_router(cctv_router)
 
 
@@ -63,8 +68,16 @@ class ScenarioRequest(BaseModel):
 
 
 class EmergencyRequest(BaseModel):
-    kind: str
-    node_id: str
+    kind: str = Field(min_length=1, max_length=40)
+    node_id: str = Field(min_length=1, max_length=64)
+
+
+class ClearRequest(BaseModel):
+    node_id: str | None = Field(default=None, max_length=64)
+
+
+class TextRequest(BaseModel):
+    text: str = Field(default="", max_length=2000)
 
 
 @app.get("/health")
@@ -90,36 +103,38 @@ def simulation():
 
 
 @app.get("/api/simulation/history")
-async def simulation_history(limit: int = Query(default=50, ge=1, le=500)):
-    return {"items": await history(SIMULATION_ID, limit)}
+async def simulation_history(limit: int = Query(default=50, ge=1, le=500), offset: int = Query(default=0, ge=0, le=1_000_000),
+                             min_risk: float | None = Query(default=None, ge=0, le=100),
+                             risk_level: str | None = Query(default=None, pattern="^(?i:low|moderate|high|critical)$")):
+    return {"items": await history(SIMULATION_ID, limit, offset, min_risk, risk_level), "limit": limit, "offset": offset}
 
 
-@app.post("/api/simulation/scenario")
+@app.post("/api/simulation/scenario", dependencies=operator_guard)
 def set_scenario(req: ScenarioRequest):
     engine.scenario = Scenario(req.crowd_size, req.arrival_rate, req.exit_rate, req.entry_distribution)
     engine.reset()
     return engine.snapshot()
 
 
-@app.post("/api/simulation/start")
+@app.post("/api/simulation/start", dependencies=operator_guard)
 def start():
     engine.start()
     return {"status": engine.state.status}
 
 
-@app.post("/api/simulation/pause")
+@app.post("/api/simulation/pause", dependencies=operator_guard)
 def pause():
     engine.pause()
     return {"status": engine.state.status}
 
 
-@app.post("/api/simulation/reset")
+@app.post("/api/simulation/reset", dependencies=operator_guard)
 def reset():
     engine.reset()
     return engine.snapshot()
 
 
-@app.post("/api/simulation/emergency")
+@app.post("/api/simulation/emergency", dependencies=operator_guard)
 def emergency(req: EmergencyRequest):
     if req.node_id not in venue.nodes:
         raise HTTPException(status_code=404, detail="venue_node_not_found")
@@ -127,53 +142,26 @@ def emergency(req: EmergencyRequest):
     return engine.snapshot()
 
 
-@app.post("/api/simulation/emergency/clear")
-def clear_emergency():
-    engine.clear_emergency()
+@app.post("/api/simulation/emergency/clear", dependencies=operator_guard)
+def clear_emergency(req: ClearRequest | None = None):
+    node_id = req.node_id if req else None
+    if node_id is not None and node_id not in engine.closed_nodes:
+        raise HTTPException(status_code=404, detail="node_not_closed")
+    engine.clear_emergency(node_id)
     return engine.snapshot()
 
 
-def parse_operator_scenario(text: str) -> dict:
-    import re
-    t = text.lower().replace(",", "")
-    crowd = 20000
-    match = re.search(r"(\d+(?:\.\d+)?)\s*(million|m|thousand|k)?\s*(?:people|persons|crowd)?", t)
-    if match:
-        value = float(match.group(1))
-        unit = match.group(2) or ""
-        if unit in ("million", "m"):
-            value *= 1_000_000
-        elif unit in ("thousand", "k"):
-            value *= 1_000
-        crowd = max(0, min(1_000_000, int(value)))
-
-    arrival = 600
-    match = re.search(r"(?:arriv(?:al|ing)|entry|entering)[^0-9]{0,20}(\d+)", t)
-    if match:
-        arrival = max(0, min(100_000, int(match.group(1))))
-
-    exit_rate = 800
-    match = re.search(r"(?:exit|exiting|leav(?:e|ing))[^0-9]{0,20}(\d+)", t)
-    if match:
-        exit_rate = max(0, min(100_000, int(match.group(1))))
-
-    return {
-        "crowd_size": crowd,
-        "arrival_rate": arrival,
-        "exit_rate": exit_rate,
-        "entry_distribution": {"gate-e": .55, "gate-w": .30, "gate-s": .15},
-        "explanation": "Operator language converted to structured simulation inputs. Risk and routing remain deterministic.",
-    }
+@app.post("/api/scenarios/parse", dependencies=[Depends(parse_limiter)])
+def parse_scenario(req: TextRequest):
+    result = interpret_scenario(req.text)
+    return {"crowd_size": result.crowd_size, "arrival_rate": result.arrival_rate, "exit_rate": result.exit_rate,
+            "entry_distribution": result.entry_distribution,
+            "explanation": "Operator language converted to structured simulation inputs. Risk and routing remain deterministic."}
 
 
-@app.post("/api/scenarios/parse")
-def parse_scenario(payload: dict):
-    return parse_operator_scenario(str(payload.get("text", "")))
-
-
-@app.post("/api/scenarios/interpret")
-def interpret(payload: dict):
-    result = interpret_scenario(str(payload.get("text", "")))
+@app.post("/api/scenarios/interpret", dependencies=[Depends(parse_limiter)])
+def interpret(req: TextRequest):
+    result = interpret_scenario(req.text)
     return {"crowd_size": result.crowd_size, "arrival_rate": result.arrival_rate, "exit_rate": result.exit_rate,
             "entry_distribution": result.entry_distribution, "assumptions": result.assumptions,
             "explanation": "Scenario interpretation is deterministic. Safety scoring remains in the risk engine."}
@@ -185,19 +173,40 @@ def decision_support():
 
 
 async def simulation_loop():
+    """Tick the engine. Persistence is throttled and failures never stop the simulation."""
+    last_saved = 0.0
     while True:
         await asyncio.sleep(1 / max(.5, settings.simulation_hz))
-        snapshot = engine.tick(.5)
-        if engine.state.status == "running":
-            await save_snapshot(SIMULATION_ID, snapshot)
+        try:
+            snapshot = engine.tick(.5)
+        except Exception:  # keep the loop alive; surface the problem in logs
+            log.exception("simulation tick failed")
+            continue
+        now = time.monotonic()
+        if engine.state.status == "running" and now - last_saved >= settings.snapshot_interval_sec:
+            last_saved = now
+            try:
+                await save_snapshot(SIMULATION_ID, snapshot)
+                await prune(SIMULATION_ID, settings.history_retention_rows)
+            except Exception:
+                log.exception("snapshot persistence failed")
 
 
 @app.websocket("/ws/simulation")
 async def ws_simulation(ws: WebSocket):
-    await ws.accept()
+    if not origin_allowed(ws):
+        await ws.close(code=1008)  # policy violation
+        return
+    ip = client_ip(ws)
+    if not ws_connections.acquire(ip):
+        await ws.close(code=1013)  # try again later
+        return
     try:
+        await ws.accept()
         while True:
             await ws.send_json(engine.snapshot())
             await asyncio.sleep(.5)
     except (WebSocketDisconnect, RuntimeError):
         return
+    finally:
+        ws_connections.release(ip)

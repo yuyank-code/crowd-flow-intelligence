@@ -17,7 +17,10 @@ def interpret(text: str) -> ScenarioInterpretation:
     """Deterministic fallback interpreter. It never assigns safety/risk scores."""
     t = text.lower().replace(",", "")
     crowd = 20_000
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(million|m|thousand|k)?\s*(?:people|persons|crowd)?", t)
+    unit_re = r"(?:\s*(million|thousand|m|k)\b)?"
+    # prefer a number directly followed by a people-word; fall back to the first number with a unit
+    m = (re.search(r"(\d+(?:\.\d+)?)" + unit_re + r"\s*(?:people|persons|attendees|fans|guests|crowd)\b", t)
+         or re.search(r"(\d+(?:\.\d+)?)\s*(million|thousand|m|k)\b", t))
     if m:
         value = float(m.group(1))
         unit = m.group(2) or ""
