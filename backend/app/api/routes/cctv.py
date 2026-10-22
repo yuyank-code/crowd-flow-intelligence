@@ -168,7 +168,7 @@ async def ptz(source_id: str, cmd: PtzCommand):
 async def gateway_auth(request: Request):
     """Called by the media gateway (MediaMTX `authMethod: http`) for every request it receives.
 
-    200 = allow, 401 = deny. Only HLS *reads* of a path with an active stream and a valid, unexpired
+    200 = allow, 401 = deny. Publishing needs the configured publisher credentials. Only HLS *reads* of a path with an active stream and a valid, unexpired
     playback token (bound to that camera and path) are allowed. Everything else (publish, API, metrics,
     other protocols) is denied. The token is the credential, so this route needs no operator key.
     """
@@ -176,7 +176,18 @@ async def gateway_auth(request: Request):
         body = await request.json()
     except Exception:
         raise HTTPException(401, "bad_request")
-    if not isinstance(body, dict) or body.get("action") != "read" or body.get("protocol") != "hls":
+    if not isinstance(body, dict):
+        raise HTTPException(401, "bad_request")
+    if body.get("action") == "publish":
+        # Only a local publisher that knows the configured credentials may send video in (laptop webcam mode).
+        user, pw = settings.gateway_publish_user, settings.gateway_publish_password
+        ok = (bool(user) and bool(pw) and body.get("protocol") == "rtsp"
+              and hmac.compare_digest(str(body.get("user") or ""), user)
+              and hmac.compare_digest(str(body.get("password") or ""), pw))
+        if not ok:
+            raise HTTPException(401, "publish_not_allowed")
+        return {"ok": True}
+    if body.get("action") != "read" or body.get("protocol") != "hls":
         raise HTTPException(401, "not_allowed")
     path = str(body.get("path") or "")
     tokens = parse_qs(str(body.get("query") or "")).get("token", [])

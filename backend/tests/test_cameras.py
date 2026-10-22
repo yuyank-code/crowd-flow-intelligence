@@ -326,3 +326,17 @@ def test_playback_url_uses_public_gateway_address(client, rtsp_server, monkeypat
     streams.active()[cam["id"]] = streams.StreamSession(cam["id"], "cam1")
     url = client.get(f"/api/cctv/sources/{cam['id']}/playback", headers=KEY).json()["url"]
     assert url.startswith("http://localhost:8888/cam1/index.m3u8?token=")
+
+
+def test_gateway_hook_publish_requires_configured_credentials(client, monkeypatch):
+    pub = {"action": "publish", "protocol": "rtsp", "path": "webcam", "user": "pubuser", "password": "pubpass"}
+    assert client.post("/api/cctv/gateway/auth", json=pub).status_code == 401          # nothing configured: denied
+    monkeypatch.setattr(settings, "gateway_publish_user", "pubuser")
+    monkeypatch.setattr(settings, "gateway_publish_password", "pubpass")
+    assert client.post("/api/cctv/gateway/auth", json=pub).status_code == 200
+    assert client.post("/api/cctv/gateway/auth", json=pub | {"password": "nope"}).status_code == 401
+    assert client.post("/api/cctv/gateway/auth", json=pub | {"user": ""}).status_code == 401
+    assert client.post("/api/cctv/gateway/auth", json=pub | {"protocol": "hls"}).status_code == 401
+    monkeypatch.setattr(settings, "gateway_publish_user", "")
+    monkeypatch.setattr(settings, "gateway_publish_password", "")
+    assert client.post("/api/cctv/gateway/auth", json=pub | {"user": "", "password": ""}).status_code == 401  # empty config never matches empty creds

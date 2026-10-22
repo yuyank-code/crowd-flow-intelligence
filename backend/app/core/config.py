@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     media_gateway_base_url: str = ""
     # Address the BROWSER uses for HLS (e.g. http://localhost:8888). Empty = same as media_gateway_base_url.
     media_gateway_public_url: str = ""
+    # Credentials a local publisher (e.g. ffmpeg sending a laptop webcam) must use to publish to the gateway.
+    # Empty = publishing is denied.
+    gateway_publish_user: str = ""
+    gateway_publish_password: str = ""
     playback_signing_key: str = ""          # HMAC key for short-lived playback tokens
     playback_token_ttl_sec: int = 60
 
