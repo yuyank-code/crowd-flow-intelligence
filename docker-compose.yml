@@ -8,6 +8,11 @@ services:
       # Set it in your shell or a .env file next to this compose file.
       OPERATOR_API_KEY: ${OPERATOR_API_KEY:?set OPERATOR_API_KEY (e.g. openssl rand -hex 24)}
       TRUST_PROXY: "true"   # the nginx container forwards the real client IP
+      # Camera management (see backend/.env.example). Set via .env, never in this file.
+      CCTV_SECRET_KEY: ${CCTV_SECRET_KEY:-}
+      MEDIA_GATEWAY_BASE_URL: ${MEDIA_GATEWAY_BASE_URL:-}
+      MEDIA_GATEWAY_PUBLIC_URL: ${MEDIA_GATEWAY_PUBLIC_URL:-}
+      PLAYBACK_SIGNING_KEY: ${PLAYBACK_SIGNING_KEY:-}
     expose:
       - "8000"
     ports:
@@ -20,5 +25,20 @@ services:
       - backend
     ports:
       - "8080:80"
+  # Optional live-video gateway: docker compose --profile gateway up
+  # Needs in .env: MEDIA_GATEWAY_BASE_URL=http://mediamtx:8888, MEDIA_GATEWAY_PUBLIC_URL=http://localhost:8888,
+  # CCTV_SECRET_KEY, PLAYBACK_SIGNING_KEY, and MTX_PATHS_CAM1_SOURCE=rtsp://... for the camera.
+  # Config tested against MediaMTX v1.12.3 as a native binary; this container was not run.
+  mediamtx:
+    image: bluenviron/mediamtx:1.12.3
+    profiles: ["gateway"]
+    depends_on:
+      - backend
+    environment:
+      MTX_PATHS_CAM1_SOURCE: ${MTX_PATHS_CAM1_SOURCE:-rtsp://192.0.2.10:554/stream1}
+    ports:
+      - "8888:8888"   # HLS (every request is checked against the backend)
+    volumes:
+      - ./infra/mediamtx/mediamtx.yml:/mediamtx.yml:ro
 volumes:
   crowdflow-data:

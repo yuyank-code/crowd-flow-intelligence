@@ -1,0 +1,23 @@
+# Test-only config: lets a local ffmpeg publish a test pattern so the auth flow can be exercised without a real camera.
+logLevel: info
+api: no
+metrics: no
+pprof: no
+playback: no
+rtmp: no
+srt: no
+webrtc: no
+rtsp: yes
+rtspAddress: :18554
+rtspTransports: [tcp]
+hls: yes
+hlsAddress: :18888
+hlsAllowOrigin: '*'
+hlsVariant: mpegts
+authMethod: http
+authHTTPAddress: http://127.0.0.1:18000/api/cctv/gateway/auth
+authHTTPExclude:
+  - action: publish
+  - action: api
+paths:
+  all_others:

@@ -20,6 +20,10 @@ const KEY_STORAGE = "crowdflow.operatorKey";
 const getKey = (): string => { try { return sessionStorage.getItem(KEY_STORAGE) ?? ""; } catch { return ""; } };
 const setKey = (k: string) => { try { k ? sessionStorage.setItem(KEY_STORAGE, k) : sessionStorage.removeItem(KEY_STORAGE); } catch { /* ignore */ } };
 
+/** Operator key for this browser tab (sessionStorage; never localStorage or env files). */
+export function setOperatorKey(k: string) { if (k) setKey(k); }  // empty input must not wipe a stored key
+export function hasOperatorKey() { return getKey().length > 0; }
+
 const FRIENDLY: Record<string, string> = {
   operator_key_required: "Operator key missing or incorrect.",
   rate_limited: "Too many requests. Wait a moment and try again.",
@@ -55,5 +59,6 @@ export async function request<T = unknown>(path: string, init?: RequestInit, ret
     } catch { /* non-JSON error body */ }
     throw new ApiError(res.status, FRIENDLY[detail] ?? detail);
   }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }

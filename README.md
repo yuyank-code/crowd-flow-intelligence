@@ -21,7 +21,7 @@ Connect four layers:
 - Risk: auditable deterministic thresholds and bottleneck detection
 - Scenario parsing & decision support: deterministic, rule-based (no external LLM is connected)
 - Geo: provider adapters for permitted public/licensed geospatial data
-- CCTV: operator-configured source catalog + URL health check only (no video ingestion or computer vision yet)
+- Cameras: register RTSP/ONVIF/USB cameras (Cameras tab), protocol-aware connection tests, encrypted credentials, audit log, and live HLS preview through a MediaMTX gateway with signed expiring tokens. No computer vision yet; PTZ/snapshot/discovery are gated off.
 
 ## Safety boundary
 
@@ -68,6 +68,16 @@ History is stored in the `crowdflow-data` volume. Live simulation state is in me
 - **CORS** allows only `CORS_ORIGINS`, GET/POST, and the `Content-Type` and `X-API-Key` headers; no cookies/credentials.
 - **WebSocket** rejects browser connections from origins outside `CORS_ORIGINS` (or the same host), and caps connections (200 total, 10 per IP).
 - **TLS.** Terminate HTTPS at your reverse proxy; the key travels in a header and must not go over plain HTTP outside localhost.
+
+## Cameras and live video
+
+1. In `.env` (next to `docker-compose.yml`) set `OPERATOR_API_KEY`, `CCTV_SECRET_KEY` (Fernet key, command in `backend/.env.example`) and `PLAYBACK_SIGNING_KEY` (`openssl rand -hex 32`).
+2. Edit `infra/mediamtx/mediamtx.yml`: one `paths:` entry per camera, and `hlsAllowOrigin` to your dashboard URL. Put the camera's RTSP URL in `.env` as `MTX_PATHS_CAM1_SOURCE=rtsp://user:pass@192.168.1.50:554/stream1`.
+3. Set `MEDIA_GATEWAY_BASE_URL=http://mediamtx:8888` and `MEDIA_GATEWAY_PUBLIC_URL=http://localhost:8888`, then `docker compose --profile gateway up --build`.
+4. Cameras tab: add the camera (playback path `cam1`), **Test connection**, **Start stream**.
+
+Check the gateway/token flow without a camera: `MEDIAMTX_BIN=/path/to/mediamtx ./scripts/test-gateway-e2e.sh` (needs ffmpeg).
+Cameras must be on a network the backend can reach; do not expose camera ports publicly.
 
 ## Known limitations
 

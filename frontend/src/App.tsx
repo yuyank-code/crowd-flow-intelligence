@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import CameraManagement from "./components/CameraManagement";
 import DecisionSupport from "./components/DecisionSupport";
 import { request, wsUrl } from "./api";
 
@@ -16,7 +17,7 @@ type Snapshot = {
 };
 type Interpretation = { crowd_size: number; arrival_rate: number; exit_rate: number; assumptions: string[]; explanation: string };
 type HistoryRow = { id: number; created_at: string; sim_time_min: number; risk_score: number; risk_level: string };
-type Camera = { id: string; name: string; configured: boolean };
+type Camera = { id: string; name: string; configured: boolean; status?: string };
 type Geo = { error?: string; features?: unknown[]; attribution?: string; source?: string };
 
 const STALE_AFTER_MS = 3000;
@@ -34,6 +35,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // name of the in-flight action; blocks duplicates
   const busyRef = useRef(false);
+  const [view, setView] = useState<"dashboard" | "cameras">("dashboard");
 
   const accept = useCallback((s: Snapshot) => { setSnap(s); setLastUpdate(Date.now()); }, []);
 
@@ -94,9 +96,14 @@ export default function App() {
     <div className="app">
       <header>
         <div><b>CROWD FLOW</b><span> INTELLIGENCE</span><small>Venue operations & geospatial decision support · prototype, not a certified life-safety system</small></div>
+        <nav className="tabs">
+          <button className={view === "dashboard" ? "active" : ""} onClick={() => setView("dashboard")}>DASHBOARD</button>
+          <button className={view === "cameras" ? "active" : ""} onClick={() => setView("cameras")}>CAMERAS</button>
+        </nav>
         <div className="status">● {statusLabel}{!connected && " – showing last known state"}</div>
       </header>
       {error && <div className="banner" role="alert">{error} <button onClick={() => setError(null)}>dismiss</button></div>}
+      {view === "cameras" ? <CameraManagement /> : (
       <main>
         <aside>
           <section>
@@ -167,7 +174,7 @@ export default function App() {
           <section><label>RISK ENGINE (deterministic)</label><div className={"risk " + (s?.risk_level ?? "LOW").toLowerCase()}>{s?.risk_level} <b>{Math.round(s?.risk_score ?? 0)}/100</b></div></section>
           <section><label>BOTTLENECKS</label>{s?.bottlenecks.length ? <ul>{s.bottlenecks.map(x => <li key={x}>{x}</li>)}</ul> : <p>All monitored corridors are below threshold.</p>}</section>
           <section><label>CCTV SOURCES (catalog only, no video analytics)</label>
-            {cameras === null ? <p className="muted">Loading…</p> : cameras.length ? cameras.map(c => <p className="muted" key={c.id}>● {c.name} · {c.configured ? "URL configured" : "metadata only"}</p>) : <p className="muted">No authorized camera sources configured.</p>}
+            {cameras === null ? <p className="muted">Loading…</p> : cameras.length ? cameras.map(c => <p className="muted" key={c.id}>● {c.name} · {c.status ?? "unknown"} · {c.configured ? "endpoint set" : "metadata only"}</p>) : <p className="muted">No authorized camera sources configured.</p>}
           </section>
           <section><label>INCIDENTS</label>{s?.events.length ? <ul>{s.events.slice(-5).map((x, i) => <li key={i}>{x.type} · {x.node_id ?? "all"} · t={x.time}</li>)}</ul> : <p>No incidents recorded.</p>}</section>
           <section><label>DECISION SUPPORT (rule-based)</label><DecisionSupport active={connected} /></section>
@@ -177,6 +184,7 @@ export default function App() {
           </section>
         </aside>
       </main>
+      )}
     </div>
   );
 }
