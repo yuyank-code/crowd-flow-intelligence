@@ -1,0 +1,46 @@
+name: Docker and gateway verification
+
+on:
+  push:
+    branches: ["main", "ci/**"]
+  workflow_dispatch:
+
+jobs:
+  docker-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/verify-docker.sh
+      - if: failure()
+        run: docker compose logs --tail=100
+      - if: always()
+        run: docker compose down -v
+
+  gateway-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: pip install -e backend
+      - name: Download MediaMTX v1.12.3
+        run: |
+          curl -fsSL -o mtx.tgz https://github.com/bluenviron/mediamtx/releases/download/v1.12.3/mediamtx_v1.12.3_linux_amd64.tar.gz
+          tar xzf mtx.tgz mediamtx
+      - run: MEDIAMTX_BIN="$PWD/mediamtx" ./scripts/test-gateway-e2e.sh | tee e2e.txt
+      - name: Fail if any check did not match its expectation
+        run: |
+          python3 - <<'PY'
+          import re,sys
+          bad=[]
+          for l in open("e2e.txt"):
+              m=re.search(r"^(.*?):\s+(\d{3}|ok)\s+\(expect (\d{3}|ok)",l)
+              if m and m.group(2)!=m.group(3): bad.append(l.strip())
+              if "FAILED" in l: bad.append(l.strip())
+          print("\n".join(bad) or "all gateway checks matched")
+          sys.exit(1 if bad else 0)
+          PY
