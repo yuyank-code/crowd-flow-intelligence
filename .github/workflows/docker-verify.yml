@@ -13,8 +13,10 @@ jobs:
       - uses: actions/checkout@v4
       - run: ./scripts/verify-docker.sh
       - if: failure()
+        env: {OPERATOR_API_KEY: cleanup}   # compose requires the variable to be set, even to stop
         run: docker compose logs --tail=100
       - if: always()
+        env: {OPERATOR_API_KEY: cleanup}
         run: docker compose down -v
 
   gateway-e2e:
