@@ -31,3 +31,9 @@ npm-debug.log*
 
 # Logs
 *.log
+
+# build artifacts
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+*.egg-info/

@@ -4,8 +4,14 @@ services:
     environment:
       DATABASE_URL: sqlite+aiosqlite:////data/crowd_flow.db
       CORS_ORIGINS: '["http://localhost:8080"]'
+      # Required: operator actions (start/pause/reset/emergency/scenario) need this key.
+      # Set it in your shell or a .env file next to this compose file.
+      OPERATOR_API_KEY: ${OPERATOR_API_KEY:?set OPERATOR_API_KEY (e.g. openssl rand -hex 24)}
+      TRUST_PROXY: "true"   # the nginx container forwards the real client IP
+    expose:
+      - "8000"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"   # debugging from this machine only; remove in production
     volumes:
       - crowdflow-data:/data
   frontend:
