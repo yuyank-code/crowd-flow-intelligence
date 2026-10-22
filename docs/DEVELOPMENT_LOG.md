@@ -37,6 +37,14 @@ Baseline on this snapshot: backend did not install (Hatchling package config), `
 - Tests: 43 -> 56 (`tests/test_security.py`).
 - Limits: single shared key, in-memory limiter (not shared across workers), no audit log, no TLS in-repo.
 
+## Milestone 5 — camera management and live gateway
+- Camera module merged onto main (own operator check kept fail-closed for camera routes; shared rate limiter applied).
+- MediaMTX v1.12.3 gateway: config in `infra/mediamtx`, auth hook `POST /api/cctv/gateway/auth`, separate public gateway URL, token renewal in the player.
+- Found by running the real gateway: stream start could never succeed once the gateway enforced tokens (the backend's own manifest probe had no token). Fixed with a per-probe token.
+- Found: MediaMTX 1.12.3 uses `hlsAllowOrigin` (not `hlsAllowOrigins`).
+- Verified with a real MediaMTX binary + ffmpeg test stream (`scripts/test-gateway-e2e.sh`): no/forged/expired token denied, valid token allowed for manifest, variant and segments, stop revokes access, video decodes.
+- Tests: 56 -> 82. NOT verified: physical camera, browser playback, Docker image run.
+
 ## Next
 - Migrate the richer original simulation/routing/CCTV/AI modules from the uploaded prototype.
 - Replace the placeholder scenario parser with validated AI provider output.

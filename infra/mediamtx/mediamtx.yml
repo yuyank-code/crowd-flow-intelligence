@@ -1,0 +1,32 @@
+# MediaMTX gateway for CrowdFlow. Pinned/tested with MediaMTX v1.12.3.
+# MediaMTX pulls each camera's RTSP stream itself and serves browser-playable HLS.
+# Every HLS request is checked against the CrowdFlow backend (short-lived signed token).
+logLevel: info
+
+# Only HLS is exposed to clients. Management/metrics and other protocols are off.
+api: no
+metrics: no
+pprof: no
+playback: no
+rtsp: no
+rtmp: no
+srt: no
+webrtc: no
+
+hls: yes
+hlsAddress: :8888
+# Origins allowed to load video. Set this to your dashboard URL.
+hlsAllowOrigin: 'http://localhost:8080'
+hlsVariant: mpegts
+
+authMethod: http
+authHTTPAddress: http://backend:8000/api/cctv/gateway/auth
+
+paths:
+  # One entry per camera. The path name must equal the camera's "playback path" in the Cameras tab.
+  # Replace the placeholder source with your camera's RTSP address. If it needs credentials, do NOT write them here;
+  # override the whole value from the environment instead (docker compose .env):
+  #   MTX_PATHS_CAM1_SOURCE=rtsp://user:pass@192.168.1.50:554/stream1
+  cam1:
+    source: rtsp://192.0.2.10:554/stream1   # placeholder (documentation address)
+    sourceOnDemand: yes                     # connect to the camera only while someone is watching

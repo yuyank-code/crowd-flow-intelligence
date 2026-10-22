@@ -11,7 +11,7 @@ engine = create_async_engine(settings.database_url, future=True)
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 async def init_db() -> None:
-    from app.db.models import SimulationSnapshot  # noqa: F401
+    import app.db.models  # noqa: F401  (registers all tables)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
