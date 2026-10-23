@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { cameras } from "../api/cameras";
 
-type Props = { cameraId: string; active: boolean; supported: boolean };
+type Props = { cameraId: string; active: boolean; supported: boolean; onVideo?: (el: HTMLVideoElement | null) => void };
 
 /** Plays the gateway's short-lived HLS reference. Never receives a raw RTSP URL or credentials. */
-export default function CameraPreview({ cameraId, active, supported }: Props) {
+export default function CameraPreview({ cameraId, active, supported, onVideo }: Props) {
   const video = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<"idle" | "loading" | "playing" | "error">("idle");
   const [message, setMessage] = useState("");
+
+  // Let a parent (e.g. the live people counter) read frames from the playing <video>.
+  useEffect(() => { onVideo?.(active && supported ? video.current : null); return () => onVideo?.(null); }, [active, supported, onVideo]);
 
   useEffect(() => {
     if (!active || !supported) { setState("idle"); return; }

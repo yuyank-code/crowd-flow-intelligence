@@ -13,7 +13,9 @@ class Settings(BaseSettings):
     rate_limit_window_sec: float = 60.0
     rate_limit_operator: int = 60           # state-changing requests per window per client (0 = off)
     rate_limit_geo: int = 20                # geocoding / map-context requests per window per client
+    rate_limit_live: int = 150              # camera count updates per window per client (about one per second)
     rate_limit_parse: int = 30              # scenario text parsing per window per client
+    live_stale_after_sec: float = 10.0      # a live zone with no fresh count for this long is shown as STALE
     ws_max_connections: int = 200
     ws_max_per_ip: int = 10
 

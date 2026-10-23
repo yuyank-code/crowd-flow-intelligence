@@ -45,6 +45,14 @@ Baseline on this snapshot: backend did not install (Hatchling package config), `
 - Verified with a real MediaMTX binary + ffmpeg test stream (`scripts/test-gateway-e2e.sh`): no/forged/expired token denied, valid token allowed for manifest, variant and segments, stop revokes access, video decodes.
 - Tests: 56 -> 82. NOT verified: physical camera, browser playback, Docker image run.
 
+## Milestone 6 — live camera zone (browser people counting)
+- Operator chose: live zone beside the simulation, detection in the browser.
+- Backend: `app/live/store.py`, `POST/GET/DELETE /api/live...`, `live` merged into the snapshot and WebSocket; same deterministic thresholds; STALE handling; own rate limit; deleting a camera clears its zone.
+- Frontend: bundled CenterNet model (lazy-loaded), `LiveZone` panel with boxes overlay, graph outline/labels, LIVE ZONES list.
+- Verified: backend tests (83 -> 91); detector run in headless Chromium on a test photo (3 of 4 people found, 4th cut off by the frame edge; ~6 s/frame on software rendering, GPU speed not measured).
+- NOT verified: counting on the real laptop webcam, GPU performance, accuracy on real crowds, a browser test in CI (needs a test image with a licence we can commit).
+- Found while working: another process had added uncommitted server-side counting code (YOLOX/OpenCV, `backend/app/vision`) to the shared clone. It was left untouched and is not part of this change.
+
 ## Next
 - Migrate the richer original simulation/routing/CCTV/AI modules from the uploaded prototype.
 - Replace the placeholder scenario parser with validated AI provider output.

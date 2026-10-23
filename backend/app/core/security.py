@@ -71,6 +71,7 @@ class RateLimiter:
 operator_limiter = RateLimiter("operator", "rate_limit_operator")
 geo_limiter = RateLimiter("geo", "rate_limit_geo")
 parse_limiter = RateLimiter("parse", "rate_limit_parse")
+live_limiter = RateLimiter("live", "rate_limit_live")
 
 operator_guard = [Depends(require_operator), Depends(operator_limiter)]
 

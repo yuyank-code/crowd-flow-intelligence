@@ -11,6 +11,7 @@ from app.cctv.schemas import CameraCreate, CameraUpdate, PtzCommand
 from app.cctv.security import EndpointRejected, SecretStorageUnavailable, verify_playback_token
 from app.cctv.service import CCTVAdapterError, health, source_catalog
 from app.core.config import settings
+from app.live.store import store as live_store
 from app.core.security import operator_limiter
 
 router = APIRouter(prefix="/api/cctv", tags=["CCTV"])
@@ -96,6 +97,7 @@ async def update_camera(source_id: str, req: CameraUpdate):
 async def delete_camera(source_id: str):
     cam = await _camera(source_id)
     streams.stop(cam.id)
+    live_store.forget_camera(cam.id)
     await repo.remove(cam.id)
     await repo.audit(cam.id, "delete", cam.name)
 
