@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CameraManagement from "./components/CameraManagement";
 import DecisionSupport from "./components/DecisionSupport";
+import LiveZone, { type LiveZoneData } from "./components/LiveZone";
 import { request, wsUrl } from "./api";
 
 type Node = { id: string; label: string; kind: string; x: number; y: number; capacity: number; occupancy: number };
@@ -14,6 +15,7 @@ type Snapshot = {
     effective_crowd_size: number; crowd_capped: boolean; closed_nodes: string[];
   };
   nodes: Node[]; edges: Edge[];
+  live?: LiveZoneData[];
 };
 type Interpretation = { crowd_size: number; arrival_rate: number; exit_rate: number; assumptions: string[]; explanation: string };
 type HistoryRow = { id: number; created_at: string; sim_time_min: number; risk_score: number; risk_level: string };
@@ -83,6 +85,7 @@ export default function App() {
 
   const nodes = useMemo(() => snap?.nodes ?? [], [snap]);
   const edges = snap?.edges ?? [];
+  const liveZones = snap?.live ?? [];
   const s = snap?.state;
   const stale = connected && now - lastUpdate > STALE_AFTER_MS;
   const statusLabel = !connected ? "OFFLINE" : stale ? "STALE" : "LIVE";
@@ -161,19 +164,29 @@ export default function App() {
               return <div key={e.id} className={"edge " + cls} title={`${e.id}: ${(e.density * 100).toFixed(0)}% · ${e.status}`}
                 style={{ left: a.x + "%", top: a.y + "%", width: Math.hypot(b.x - a.x, b.y - a.y) + "%", transform: `rotate(${Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI}deg)` }} />;
             })}
-            {nodes.map(n => (
-              <div key={n.id} className={"node " + n.kind} style={{ left: n.x + "%", top: n.y + "%" }} title={`${n.label}: ${n.occupancy}/${n.capacity}`}>
-                <span /><small>{n.label} ({n.occupancy})</small>
-              </div>
-            ))}
-            <div className="maptitle">VENUE GRAPH · SIMULATED AGENTS</div>
+            {nodes.map(n => {
+              const lz = liveZones.find(z => z.zone_id === n.id);
+              return (
+                <div key={n.id} className={"node " + n.kind + (lz ? " live " + lz.risk_level.toLowerCase() : "")} style={{ left: n.x + "%", top: n.y + "%" }}
+                  title={lz ? `${n.label}: LIVE camera count ${lz.people} (${lz.status})` : `${n.label}: simulated ${n.occupancy}/${n.capacity}`}>
+                  <span /><small>{n.label} ({n.occupancy} sim){lz && <em> · {lz.status} {lz.people} real</em>}</small>
+                </div>
+              );
+            })}
+            <div className="maptitle">VENUE GRAPH · SIMULATED AGENTS{liveZones.length ? " · LIVE CAMERA ZONES OUTLINED" : ""}</div>
           </div>
+          <LiveZone nodes={nodes} live={liveZones} />
           <div className="timeline">Simulation time: {s?.sim_time_min.toFixed(1)} min · Status: {s?.status} · Inside: {s?.people_inside} · Waiting to exit: {s?.waiting_to_exit}</div>
         </div>
         <aside className="right">
           <section><label>RISK ENGINE (deterministic)</label><div className={"risk " + (s?.risk_level ?? "LOW").toLowerCase()}>{s?.risk_level} <b>{Math.round(s?.risk_score ?? 0)}/100</b></div></section>
           <section><label>BOTTLENECKS</label>{s?.bottlenecks.length ? <ul>{s.bottlenecks.map(x => <li key={x}>{x}</li>)}</ul> : <p>All monitored corridors are below threshold.</p>}</section>
-          <section><label>CCTV SOURCES (catalog only, no video analytics)</label>
+          <section><label>LIVE ZONES (real camera counts)</label>
+            {liveZones.length ? liveZones.map(z => (
+              <p key={z.zone_id} className="muted"><span className={"lvl " + z.risk_level.toLowerCase()}>● {z.status}</span> {nodes.find(n => n.id === z.zone_id)?.label ?? z.zone_id}: <b>{z.people}</b> people · {z.risk_level} {Math.round(z.risk_score)}/100{z.status === "STALE" ? " (no fresh count)" : ""}</p>
+            )) : <p className="muted">No live camera zone. Start live counting below the venue graph. Everything else on this page is simulated.</p>}
+          </section>
+          <section><label>CAMERAS (registered sources)</label>
             {cameras === null ? <p className="muted">Loading…</p> : cameras.length ? cameras.map(c => <p className="muted" key={c.id}>● {c.name} · {c.status ?? "unknown"} · {c.configured ? "endpoint set" : "metadata only"}</p>) : <p className="muted">No authorized camera sources configured.</p>}
           </section>
           <section><label>INCIDENTS</label>{s?.events.length ? <ul>{s.events.slice(-5).map((x, i) => <li key={i}>{x.type} · {x.node_id ?? "all"} · t={x.time}</li>)}</ul> : <p>No incidents recorded.</p>}</section>

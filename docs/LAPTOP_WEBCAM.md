@@ -31,7 +31,20 @@ You do not need a server or a real CCTV camera. Your laptop runs the app and sen
    - Playback path: `webcam`
 4. Press **Test connection** (should say Reachable), then **Start stream**. Your webcam appears in the preview.
 
-Stop: Ctrl+C in each terminal, then `docker compose --profile laptop down`.
+## Use the webcam's real people count on the dashboard
+
+1. Make sure the camera shows your video in the Cameras tab (steps above).
+2. Open the **DASHBOARD** tab. Below the venue graph is the **LIVE CAMERA ZONE** panel.
+3. Pick your camera, pick the venue zone it watches (for example East Gate), and enter roughly how many square metres the camera can see
+   (a desk area is about 3, a small room about 15-20).
+4. Press **START LIVE COUNTING**. The first start loads the detector (a few seconds). Green boxes appear around people and the count updates about once a second.
+5. The zone on the venue graph gets a coloured outline and a "LIVE n real" label, and the right-hand **LIVE ZONES** list shows its risk.
+   Everything else on the page stays simulated and is labelled that way.
+
+Keep that browser tab open while counting. Press **STOP** to remove the live zone. Counts are approximate: people who are partly hidden can be missed.
+
+## Stop everything
+Press Ctrl+C in each terminal, then `docker compose --profile laptop down`.
 
 ## If something goes wrong
 

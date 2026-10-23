@@ -81,6 +81,15 @@ No camera? Use your laptop webcam: see `docs/LAPTOP_WEBCAM.md`.
 Check the gateway/token flow without a camera: `MEDIAMTX_BIN=/path/to/mediamtx ./scripts/test-gateway-e2e.sh` (needs ffmpeg).
 Cameras must be on a network the backend can reach; do not expose camera ports publicly.
 
+## Live camera counting
+
+A registered camera can drive one venue zone with a real people count instead of simulated agents (dashboard, **LIVE CAMERA ZONE** panel).
+Detection runs in the operator's browser tab with a bundled model (CenterNet, COCO "person"; `frontend/public/models`), so frames never leave
+the browser. Only the integer count and the view area are sent (`POST /api/live/observations`, operator key required). The backend scores it with the same
+deterministic density thresholds as the simulation, using the camera's own view as the capacity (view area x 2 people/m2, a planning assumption),
+and marks a zone STALE after 10 s without a fresh count. Live zones are shown beside the simulation and labelled LIVE; the rest stays SIMULATED.
+Counts are approximate (partly hidden people can be missed), accuracy depends on camera angle and lighting, and counting stops when the tab closes.
+
 ## Known limitations
 
 - Prototype / decision support only. Not a certified life-safety system.

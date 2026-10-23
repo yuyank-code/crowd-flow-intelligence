@@ -10,10 +10,12 @@ from pydantic import BaseModel, Field, field_validator
 from .api.routes.geospatial import router as geospatial_router
 from .api.routes.cctv import router as cctv_router
 from .core.config import settings
-from .core.security import (client_ip, geo_limiter, operator_guard, origin_allowed, parse_limiter,
+from .core.security import (client_ip, geo_limiter, live_limiter, operator_guard, operator_limiter, require_operator, origin_allowed, parse_limiter,
                             ws_connections)
 from .db.database import close_db, init_db
 from .db.repository import history, prune, save_snapshot
+from .live.store import store as live_store
+from .cctv import repository as camera_repo
 from .engine import CrowdEngine, Scenario, build_demo_venue
 from .ai.service import explain as explain_snapshot, interpret as interpret_scenario
 
@@ -80,6 +82,39 @@ class TextRequest(BaseModel):
     text: str = Field(default="", max_length=2000)
 
 
+def full_snapshot() -> dict:
+    """Simulation snapshot plus real camera-derived zones (clearly separate under "live")."""
+    return engine.snapshot() | {"live": live_store.snapshot()}
+
+
+class ObservationRequest(BaseModel):
+    camera_id: str = Field(min_length=1, max_length=36)
+    zone_id: str = Field(min_length=1, max_length=64)
+    people: int = Field(ge=0, le=2000)
+    view_area_m2: float = Field(gt=0, le=10000)
+
+
+@app.post("/api/live/observations", dependencies=[Depends(require_operator), Depends(live_limiter)])
+async def post_observation(req: ObservationRequest):
+    """A browser (or other detector) reports how many people a registered camera sees in a venue zone."""
+    if req.zone_id not in venue.nodes:
+        raise HTTPException(status_code=404, detail="venue_node_not_found")
+    if await camera_repo.get(req.camera_id) is None:
+        raise HTTPException(status_code=404, detail="camera_not_found")
+    live_store.record(req.zone_id, req.camera_id, req.people, req.view_area_m2)
+    return {"live": live_store.snapshot()}
+
+
+@app.get("/api/live")
+def get_live():
+    return {"live": live_store.snapshot()}
+
+
+@app.delete("/api/live/{zone_id}", status_code=204, dependencies=[Depends(require_operator), Depends(operator_limiter)])
+def clear_live_zone(zone_id: str):
+    live_store.forget_zone(zone_id)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "version": settings.app_version, "simulation": engine.state.status}
@@ -94,12 +129,12 @@ def venues():
 def venue_detail(venue_id: str):
     if venue_id != venue.id:
         raise HTTPException(status_code=404, detail="venue_not_found")
-    return engine.snapshot()
+    return full_snapshot()
 
 
 @app.get("/api/simulation")
 def simulation():
-    return engine.snapshot()
+    return full_snapshot()
 
 
 @app.get("/api/simulation/history")
@@ -204,7 +239,7 @@ async def ws_simulation(ws: WebSocket):
     try:
         await ws.accept()
         while True:
-            await ws.send_json(engine.snapshot())
+            await ws.send_json(full_snapshot())
             await asyncio.sleep(.5)
     except (WebSocketDisconnect, RuntimeError):
         return
