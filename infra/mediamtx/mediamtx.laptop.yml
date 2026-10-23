@@ -1,0 +1,28 @@
+# Laptop mode: your own webcam is published into the gateway by ffmpeg, then watched in the dashboard.
+# Publishing needs the credentials in .env (checked by the backend), and the RTSP port is only published on
+# 127.0.0.1 of your machine (see docker-compose.yml). Browser playback still needs a signed, expiring token.
+logLevel: info
+api: no
+metrics: no
+pprof: no
+playback: no
+rtmp: no
+srt: no
+webrtc: no
+
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp]
+
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigin: 'http://localhost:8080'
+hlsVariant: mpegts
+
+authMethod: http
+authHTTPAddress: http://backend:8000/api/cctv/gateway/auth
+authHTTPExclude:
+  - action: api
+
+paths:
+  webcam:

@@ -13,6 +13,8 @@ services:
       MEDIA_GATEWAY_BASE_URL: ${MEDIA_GATEWAY_BASE_URL:-}
       MEDIA_GATEWAY_PUBLIC_URL: ${MEDIA_GATEWAY_PUBLIC_URL:-}
       PLAYBACK_SIGNING_KEY: ${PLAYBACK_SIGNING_KEY:-}
+      GATEWAY_PUBLISH_USER: ${GATEWAY_PUBLISH_USER:-}
+      GATEWAY_PUBLISH_PASSWORD: ${GATEWAY_PUBLISH_PASSWORD:-}
     expose:
       - "8000"
     ports:
@@ -40,5 +42,16 @@ services:
       - "8888:8888"   # HLS (every request is checked against the backend)
     volumes:
       - ./infra/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+  # Laptop webcam mode: docker compose --profile laptop up --build   (see docs/LAPTOP_WEBCAM.md)
+  mediamtx-laptop:
+    image: bluenviron/mediamtx:1.12.3
+    profiles: ["laptop"]
+    depends_on:
+      - backend
+    ports:
+      - "8888:8888"             # HLS for the browser (token-checked)
+      - "127.0.0.1:8554:8554"   # webcam feed in: this machine only
+    volumes:
+      - ./infra/mediamtx/mediamtx.laptop.yml:/mediamtx.yml:ro
 volumes:
   crowdflow-data:
