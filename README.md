@@ -76,6 +76,8 @@ History is stored in the `crowdflow-data` volume. Live simulation state is in me
 3. Set `MEDIA_GATEWAY_BASE_URL=http://mediamtx:8888` and `MEDIA_GATEWAY_PUBLIC_URL=http://localhost:8888`, then `docker compose --profile gateway up --build`.
 4. Cameras tab: add the camera (playback path `cam1`), **Test connection**, **Start stream**.
 
+No camera? Use your laptop webcam: see `docs/LAPTOP_WEBCAM.md`.
+
 Check the gateway/token flow without a camera: `MEDIAMTX_BIN=/path/to/mediamtx ./scripts/test-gateway-e2e.sh` (needs ffmpeg).
 Cameras must be on a network the backend can reach; do not expose camera ports publicly.
 

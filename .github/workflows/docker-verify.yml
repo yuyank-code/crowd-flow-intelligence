@@ -46,3 +46,11 @@ jobs:
           print("\n".join(bad) or "all gateway checks matched")
           sys.exit(1 if bad else 0)
           PY
+
+  laptop-mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - run: ./scripts/verify-laptop-mode.sh
