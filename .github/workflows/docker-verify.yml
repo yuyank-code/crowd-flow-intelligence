@@ -27,7 +27,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install ffmpeg (with timeouts and retries; the runner's package mirror sometimes stalls)
+        timeout-minutes: 6
+        run: |
+          APT="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT update -qq && sudo apt-get $APT install -y -qq ffmpeg
       - run: pip install -e backend
       - name: Download MediaMTX v1.12.3
         run: |
@@ -52,5 +56,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install ffmpeg (with timeouts and retries; the runner's package mirror sometimes stalls)
+        timeout-minutes: 6
+        run: |
+          APT="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $APT update -qq && sudo apt-get $APT install -y -qq ffmpeg
       - run: ./scripts/verify-laptop-mode.sh
